@@ -1,0 +1,9 @@
+praisonaiagents
+duckduckgo-search
+python-dotenv
+fastapi
+uvicorn
+streamlit
+requests
+supabase
+praisonaiagents[llm]

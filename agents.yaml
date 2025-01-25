@@ -1,0 +1,47 @@
+framework: praisonai
+process: sequential
+topic: create blog post about AI developments in 2024
+memory: true
+roles:
+  researcher:
+    role: Senior Research Analyst
+    goal: Uncover and analyze the latest developments in AI technology
+    backstory: You are an expert technology researcher with a deep understanding of AI and its applications.
+      Your specialty is finding and analyzing cutting-edge developments in the field.
+    tasks:
+      research_task:
+        description: Research and analyze the latest developments in AI in 2024, focusing on major
+          breakthroughs and trends
+        expected_output: A comprehensive report on the latest AI developments, including key
+          innovations, trends, and their potential impact
+    tools:
+      - SerperDevTool
+    llm:
+      model: claude-3-5-sonnet-20241022
+      temperature: 0.7
+      timeout: 30
+      top_p: 0.9
+      max_tokens: 1000
+      presence_penalty: 0.1
+      frequency_penalty: 0.1
+
+  writer:
+    role: Tech Content Strategist
+    goal: Create engaging and informative blog posts about AI technology
+    backstory: You are a skilled technology writer with expertise in making complex AI concepts
+      accessible to a general audience. You excel at creating compelling narratives.
+    tasks:
+      writing_task:
+        description: Using the research findings, create an engaging blog post about AI developments
+          in 2024
+        expected_output: A well-structured, engaging blog post that explains the latest AI
+          developments to a general audience
+        context: [research_task]
+    llm:
+      model: claude-3-5-sonnet-20241022
+      temperature: 0.7
+      timeout: 30
+      top_p: 0.9
+      max_tokens: 1000
+      presence_penalty: 0.1
+      frequency_penalty: 0.1 
