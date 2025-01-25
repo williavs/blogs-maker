@@ -1,7 +1,8 @@
 from supabase import create_client, Client
 import os
+import streamlit as st
 from datetime import datetime
-from typing import Dict, List, Optional, Union, BinaryIO
+from typing import Dict, List, Optional, Union, BinaryIO, Any
 from pydantic import BaseModel
 from pathlib import Path
 
@@ -12,44 +13,144 @@ class MediaContent(BaseModel):
     caption: Optional[str] = None
     alt_text: Optional[str] = None
 
-class BlogPostDB(BaseModel):
-    """Database model for blog posts"""
-    title: str
-    description: str
-    content: str
-    tags: List[str]
-    type: str = "insight"
-    published: bool = False
-    thumbnail: Optional[str] = None
-    media: Optional[List[MediaContent]] = None
+class BlogPostDB:
+    def __init__(self):
+        """Initialize Supabase client with existing configuration"""
+        self.supabase = create_client(
+            supabase_url=st.secrets["SUPABASE_URL"],
+            supabase_key=st.secrets["SUPABASE_KEY"]
+        )
+
+    def save_blog_post(self, post_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Save a new blog post to the database
+        
+        Args:
+            post_data: Dictionary containing blog post data
+                - title: str
+                - description: str
+                - content: str
+                - tags: List[str]
+                - type: str
+                - published: bool
+                - created_at: str (ISO format)
+                - updated_at: str (ISO format)
+        
+        Returns:
+            Dict containing the saved blog post data with ID
+        """
+        try:
+            response = self.supabase.table("posts").insert(post_data).execute()
+            return response.data[0] if response.data else {}
+        except Exception as e:
+            print(f"Error saving blog post: {str(e)}")
+            raise
+
+    def get_blog_posts(self, published_only: bool = False) -> List[Dict[str, Any]]:
+        """Get all blog posts, optionally filtered by published status
+        
+        Args:
+            published_only: If True, return only published posts
+        
+        Returns:
+            List of blog post dictionaries
+        """
+        try:
+            query = self.supabase.table("posts")
+            if published_only:
+                query = query.eq("published", True)
+            response = query.order("created_at", desc=True).execute()
+            return response.data if response.data else []
+        except Exception as e:
+            print(f"Error fetching blog posts: {str(e)}")
+            return []
+
+    def get_blog_post(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific blog post by ID
+        
+        Args:
+            post_id: The ID of the blog post to retrieve
+        
+        Returns:
+            Blog post dictionary if found, None otherwise
+        """
+        try:
+            response = self.supabase.table("posts").select("*").eq("id", post_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            print(f"Error fetching blog post: {str(e)}")
+            return None
+
+    def update_blog_post(self, post_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update a blog post
+        
+        Args:
+            post_id: The ID of the blog post to update
+            updates: Dictionary containing fields to update
+        
+        Returns:
+            Updated blog post dictionary if successful, None otherwise
+        """
+        try:
+            response = self.supabase.table("posts").update(updates).eq("id", post_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            print(f"Error updating blog post: {str(e)}")
+            return None
+
+    def toggle_publish_status(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """Toggle the published status of a blog post
+        
+        Args:
+            post_id: The ID of the blog post to toggle
+        
+        Returns:
+            Updated blog post dictionary if successful, None otherwise
+        """
+        try:
+            # Get current post
+            post = self.get_blog_post(post_id)
+            if not post:
+                return None
+            
+            # Toggle published status
+            updates = {
+                "published": not post.get("published", False),
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            return self.update_blog_post(post_id, updates)
+        except Exception as e:
+            print(f"Error toggling publish status: {str(e)}")
+            return None
 
 class DatabaseClient:
-    def __init__(self, url: str, key: str):
-        """Initialize Supabase client"""
-        if not url or not key:
-            raise Exception("Supabase URL and key are required")
+    def __init__(self, url: str = None, key: str = None):
+        """Initialize Supabase client with URL and key"""
+        self.connection_status = "Initializing"
+        self.storage_status = "Initializing"
         
-        print(f"Initializing Supabase client...")
-        print(f"URL provided: {'Yes' if url else 'No'}")
-        print(f"Key provided: {'Yes' if key else 'No'}")
+        # Get credentials from Streamlit secrets
+        self.url = url or st.secrets["SUPABASE_URL"]
+        self.key = key or st.secrets["SUPABASE_KEY"]
         
+        if not self.url or not self.key:
+            self.connection_status = "Error: Missing credentials"
+            raise ValueError("Supabase URL and key are required")
+            
         try:
-            self.supabase: Client = create_client(
-                supabase_url=url,
-                supabase_key=key
-            )
-            print("Successfully initialized Supabase client")
+            self.client = create_client(self.url, self.key)
+            self.connection_status = "Connecting"
             
             # Verify connection by trying to access the database
             try:
                 # Try a simple query to verify connection
-                self.supabase.table('posts').select("count", count='exact').execute()
-                print("Successfully connected to database")
+                self.client.table('posts').select("count", count='exact').execute()
+                self.connection_status = "Connected"
             except Exception as db_e:
-                print(f"Warning: Could not verify database connection: {str(db_e)}")
+                self.connection_status = f"Warning: Connection issues - {str(db_e)}"
             
         except Exception as e:
-            print(f"Error initializing Supabase client: {str(e)}")
+            self.connection_status = f"Error: Failed to connect - {str(e)}"
             raise
         
         self._ensure_storage_bucket()
@@ -57,14 +158,18 @@ class DatabaseClient:
     def _ensure_storage_bucket(self):
         """Verify access to the blog-assets/blog-images storage path"""
         try:
-            print("Attempting to access blog-assets/blog-images...")
             # Use from_ to access the bucket and list contents of the blog-images folder
-            files = self.supabase.storage.from_('blog-assets').list('blog-images')
-            print(f"Successfully accessed blog-assets/blog-images. Found {len(files)} files.")
+            files = self.client.storage.from_('blog-assets').list('blog-images')
+            self.storage_status = f"Storage accessible ({len(files)} files found)"
         except Exception as e:
-            print(f"Warning: Could not access storage path. Error details: {str(e)}")
-            if hasattr(e, 'response'):
-                print(f"Response details: {e.response.text if hasattr(e.response, 'text') else e.response}")
+            self.storage_status = f"Warning: Storage access issues - {str(e)}"
+
+    def get_status(self):
+        """Get the current status of database connections"""
+        return {
+            "connection": self.connection_status,
+            "storage": self.storage_status
+        }
 
     def upload_media(self, file: Union[BinaryIO, bytes, str, Path], file_path: str) -> str:
         """Upload media file to storage and return public URL"""
@@ -73,14 +178,14 @@ class DatabaseClient:
             full_path = f"blog-images/{file_path}"
             
             # Upload the file
-            response = self.supabase.storage.from_('blog-assets').upload(
+            response = self.client.storage.from_('blog-assets').upload(
                 path=full_path,
                 file=file,
                 file_options={"cache-control": "3600", "upsert": "true"}
             )
             
             # Get the public URL
-            public_url = self.supabase.storage.from_('blog-assets').get_public_url(full_path)
+            public_url = self.client.storage.from_('blog-assets').get_public_url(full_path)
             return public_url
         except Exception as e:
             raise Exception(f"Error uploading media: {str(e)}")
@@ -90,7 +195,7 @@ class DatabaseClient:
         try:
             # Ensure the file path includes the blog-images folder
             full_path = f"blog-images/{file_path}"
-            self.supabase.storage.from_('blog-assets').remove([full_path])
+            self.client.storage.from_('blog-assets').remove([full_path])
         except Exception as e:
             raise Exception(f"Error deleting media: {str(e)}")
 
@@ -108,7 +213,7 @@ class DatabaseClient:
                 "media": [media.dict() for media in post.media] if post.media else []
             }
             
-            response = (self.supabase.table("posts")
+            response = (self.client.table("posts")
                        .insert(data)
                        .execute())
             
@@ -123,7 +228,7 @@ class DatabaseClient:
             published_only (bool): If True, only return published posts. If False, return all posts.
         """
         try:
-            query = self.supabase.table("posts").select("*")
+            query = self.client.table("posts").select("*")
             if published_only:
                 query = query.eq("published", True)
             response = query.order("date", desc=True).execute()
@@ -134,7 +239,7 @@ class DatabaseClient:
     def get_blog_post(self, post_id: str) -> Optional[Dict]:
         """Get a specific blog post by ID"""
         try:
-            response = (self.supabase.table("posts")
+            response = (self.client.table("posts")
                        .select("*")
                        .eq("id", post_id)
                        .execute())
@@ -158,7 +263,7 @@ class DatabaseClient:
                         for media in updates["media"]
                     ]
             
-            response = (self.supabase.table("posts")
+            response = (self.client.table("posts")
                        .update(updates)
                        .eq("id", post_id)
                        .execute())
@@ -177,7 +282,7 @@ class DatabaseClient:
             
             # Only update if status is different
             if existing_post.get("published") != publish:
-                response = (self.supabase.table("posts")
+                response = (self.client.table("posts")
                            .update({"published": publish})
                            .eq("id", post_id)
                            .execute())
@@ -204,7 +309,7 @@ class DatabaseClient:
             # Add new media
             new_media = current_media + [m.dict() for m in media]
             
-            response = (self.supabase.table("posts")
+            response = (self.client.table("posts")
                        .update({"media": new_media})
                        .eq("id", post_id)
                        .execute())
@@ -215,5 +320,6 @@ class DatabaseClient:
 
 # Create a singleton instance
 db = DatabaseClient(
-    url=os.getenv("SUPABASE_URL"),
-    key=os.getenv("SUPABASE_KEY")) 
+    url=st.secrets["SUPABASE_URL"],
+    key=st.secrets["SUPABASE_KEY"]
+) 

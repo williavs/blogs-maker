@@ -1,56 +1,75 @@
-# Lite LLM Agents
+# Blogs Maker
 
-This directory contains an implementation of PraisonAI agents using Claude 3.5 Sonnet for model inference.
+A Python-based tool for generating and managing blog content using AI assistance. This project leverages modern AI capabilities to help streamline the blog creation process.
 
-## Setup
+## Features
 
-1. Install dependencies:
+- AI-powered blog content generation
+- Clean and modern web interface
+- Secure API key management
+- Easy-to-use interface
+
+## Prerequisites
+
+- Python 3.12+
+- pip (Python package manager)
+- An Anthropic API key
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/williavs/blogs-maker.git
+cd blogs-maker
+```
+
+2. Create and activate a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows, use: venv\Scripts\activate
+```
+
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Set up your environment variables (optional):
-- Create a `.env` file
-- Add your API keys if needed:
-```
-ANTHROPIC_API_KEY=your_api_key_here
-```
+4. Set up your environment variables:
+   - Create a `.streamlit/secrets.toml` file
+   - Add your Anthropic API key:
+     ```toml
+     ANTHROPIC_API_KEY = "your-api-key-here"
+     ```
 
-3. Run the agent:
+## Usage
+
+1. Start the application:
 ```bash
-python lite_llm_agent.py
+streamlit run app.py
 ```
 
-## Configuration
+2. Open your web browser and navigate to the provided URL (typically http://localhost:8501)
 
-The agent is configured with the following attributes:
-- Role: Assistant
-- Goal: Help users with their questions and tasks
-- Memory: Enabled
-- Delegation: Disabled
-- Verbose: Enabled
+3. Follow the on-screen instructions to generate blog content
 
-LLM Configuration:
-- Model: Claude 3.5 Sonnet
-- Temperature: 0.7
-- Top P: 0.9
-- Max Tokens: 1000
-- Presence Penalty: 0.1
-- Frequency Penalty: 0.1
+## Security Notes
 
-You can modify these settings in the `llm_config` dictionary in `lite_llm_agent.py`.
+- Never commit your API keys or sensitive information to the repository
+- Always use environment variables or secure secrets management for API keys
+- The `.streamlit` directory is included in `.gitignore` to prevent accidental exposure of secrets
 
-## Customization
+## Contributing
 
-To customize the agent's behavior:
-1. Modify the agent's role, goal, and backstory
-2. Adjust the LLM configuration parameters
-3. Add additional tools or capabilities
-4. Customize the conversation flow in the main() function
+1. Fork the repository
+2. Create a new branch for your feature
+3. Submit a pull request
 
-## Notes
+## License
 
-- Make sure you have appropriate API access and keys set up for Claude 3.5 Sonnet
-- The agent maintains memory of conversations by default
-- Verbose mode is enabled for debugging purposes
-- Consider adding error handling and logging for production use 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- Built with Streamlit
+- Powered by Anthropic's Claude API
+- Special thanks to all contributors 

@@ -7,15 +7,27 @@ import re
 from urllib.parse import urlparse
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from io import StringIO
-from blog_agents import main, PraisonAIAgents, researcher, writer, initial_research, analysis_task, metadata_task, writing_task, save_task
+from blog_agents import (
+    main as generate_blog,  # Rename to avoid confusion
+    PraisonAIAgents, 
+    researcher, 
+    writer, 
+    initial_research, 
+    analysis_task, 
+    metadata_task, 
+    writing_task, 
+    save_task
+)
 from database import db, BlogPostDB
 from utils.auth import require_auth, init_auth, is_authenticated, get_user
+from datetime import datetime
 
-# Configure page - MUST BE FIRST STREAMLIT COMMAND
+# Must be the first Streamlit command
 st.set_page_config(
-    page_title="Blog Post Generator",
-    page_icon="📝",
-    layout="wide"
+    page_title="Blog Maker",
+    page_icon="✍️",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Set API key from Streamlit secrets
@@ -73,6 +85,22 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# Display database status
+status = db.get_status()
+if status["connection"] == "Connected":
+    st.sidebar.success("✅ Database Connected")
+elif "Warning" in status["connection"]:
+    st.sidebar.warning(f"⚠️ {status['connection']}")
+else:
+    st.sidebar.error(f"❌ {status['connection']}")
+
+if status["storage"] == "Storage accessible":
+    st.sidebar.success("✅ Storage Connected")
+elif "Warning" in status["storage"]:
+    st.sidebar.warning(f"⚠️ {status['storage']}")
+else:
+    st.sidebar.error(f"❌ {status['storage']}")
 
 def is_valid_url(url):
     """Check if a URL is valid and properly formatted."""
@@ -144,6 +172,26 @@ def st_capture(output_func):
 # Initialize authentication
 init_auth()
 
+def new_write(data):
+    """Custom write function that handles URLs and Streamlit output"""
+    if data is None:
+        return
+    try:
+        # Process URLs if the data is a string
+        if isinstance(data, str):
+            url_pattern = r'(?:https?:\/\/)?(?:[\w-]+\.)+[\w-]+(?:\/[^\s]*)?'
+            urls = re.findall(url_pattern, data)
+            processed_data = data
+            for url in urls:
+                if url and is_valid_url(format_url(url)):
+                    formatted_url = format_url(url)
+                    processed_data = processed_data.replace(url, f'<a href="{formatted_url}" class="url-link" target="_blank">{url}</a>')
+            st.markdown(processed_data, unsafe_allow_html=True)
+        else:
+            st.write(data)
+    except Exception as e:
+        st.error(f"Error processing output: {str(e)}")
+
 @require_auth
 def show_blog_generator():
     """Show the blog generator interface"""
@@ -157,7 +205,7 @@ def show_blog_generator():
     # Input section with length control
     col1, col2 = st.columns([3, 1])
     with col1:
-        topic = st.text_input("What would you like to write about?", 
+        user_topic = st.text_input("What would you like to write about?", 
                              placeholder="Enter a topic (e.g., 'The Future of AI in Healthcare')")
     with col2:
         length = st.selectbox(
@@ -173,118 +221,65 @@ def show_blog_generator():
         )
 
     if st.button("Generate Blog Post"):
-        if topic:
-            try:
-                # Display agent info with custom styling at the top
-                st.markdown(f"""
-                <div class="terminal">
-                    <div class="agent-info">
-                        <span class="agent-name">👤 Agent: Researcher</span><br>
-                        <span class="agent-role">Role: Tech Explorer</span><br>
-                        <span class="agent-tools">Tools: internet_search</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+        if not user_topic:
+            st.error("Please enter a topic to write about.")
+            return
+            
+        # Validate topic length and content
+        if len(user_topic.strip()) < 5:
+            st.error("Topic is too short. Please provide a more specific topic.")
+            return
+            
+        if len(user_topic.strip()) > 200:
+            st.error("Topic is too long. Please make it more concise.")
+            return
 
-                # Create placeholders for each step
-                research_placeholder = st.empty()
-                analysis_placeholder = st.empty()
-                metadata_placeholder = st.empty()
-                writing_placeholder = st.empty()
+        try:
+            # Create placeholders for output
+            output_placeholder = st.empty()
+            progress = st.progress(0)
+            
+            # Store topic in session state to maintain context
+            if 'current_topic' not in st.session_state:
+                st.session_state.current_topic = user_topic
+            
+            # Create generation context
+            generation_context = {
+                'topic': user_topic,
+                'length': length,
+                'date': datetime.now().strftime("%B %Y")
+            }
+            
+            # Redirect stdout to our custom writer
+            with st_capture(new_write):
+                # Run the workflow with the user's topic and context
+                result = generate_blog(user_topic)
                 
-                
-                
-                # Initialize progress tracking
-                progress = st.progress(0)
-                
-                with st.spinner("🔍 Researching your topic..."):
-                    # Create and start the agent workflow with progress tracking
-                    agents = PraisonAIAgents(
-                        agents=[researcher, writer],
-                        tasks=[initial_research, analysis_task, metadata_task, writing_task, save_task],
-                        process="sequential",
-                        verbose=True
-                    )
-                    
-                    # Track task completion
-                    completed_tasks = []
-                    
-                    def task_callback(task_output):
-                        task_name = task_output.task_name
-                        completed_tasks.append(task_name)
-                        
-                        # Update progress bar
-                        progress.progress(len(completed_tasks) / 5)
-                        
-                        # Update appropriate placeholder based on task with custom styling
-                        if task_name == "initial_research":
-                            with research_placeholder.container():
-                                st.markdown('<div class="terminal-header">🔬 Research Findings</div>', unsafe_allow_html=True)
-                                display_json_with_links(task_output.json_dict, research_placeholder)
-                        
-                        elif task_name == "analysis":
-                            with analysis_placeholder.container():
-                                st.markdown('<div class="terminal-header">🧮 Analysis Results</div>', unsafe_allow_html=True)
-                                display_json_with_links(task_output.json_dict, analysis_placeholder)
-                        
-                        elif task_name == "metadata":
-                            with metadata_placeholder.container():
-                                st.markdown('<div class="terminal-header">📋 Blog Metadata</div>', unsafe_allow_html=True)
-                                display_json_with_links(task_output.json_dict, metadata_placeholder)
-                        
-                        elif task_name == "writing":
-                            with writing_placeholder.container():
-                                st.markdown('<div class="terminal-header">✍️ Generated Blog Post</div>', unsafe_allow_html=True)
-                                processed_content = process_json_urls(task_output.raw)
-                                writing_placeholder.markdown(processed_content, unsafe_allow_html=True)
-                        # Create a placeholder for terminal output (moved to bottom)
-                    terminal_output = st.empty()
-                    
-                    # Run the workflow with terminal output capture
-                    with st_capture(terminal_output.markdown):
-                        # Update writing task description with length control
-                        length_instructions = {
-                            'quick': 'Keep this focused and punchy- - - around 500-750 words. Hit the key points that\'ll make someone go "aha!"',
-                            'standard': 'Give us a solid exploration- - - about 1000-1500 words. Enough space to really share some good insights.',
-                            'deep': 'This is a deep exploration- - - 2500-3000 words. Really explore the nuances and share detailed examples.',
-                            'complete': 'This is a complete guide- - - 4000-5000 words. Cover everything someone needs to know, from fundamentals to advanced concepts.'
-                        }
-                        
-                        writing_task.description = writing_task.description + f"\n\nLength Control: {length_instructions[length]}"
-                        result = agents.start({"topic": topic})
-                    
-                    # Show final blog post
+                if result:
+                    # Display final blog post
                     if os.path.exists("outputs/ai_blog_post.md"):
                         with open("outputs/ai_blog_post.md", "r") as f:
                             blog_content = f.read()
-                            st.markdown('<div class="terminal-header">📝 Final Blog Post</div>', unsafe_allow_html=True)
+                            
+                            # Verify content matches topic
+                            if user_topic.lower() not in blog_content.lower():
+                                st.error("Generated content may have deviated from the requested topic. Please try again.")
+                                return
+                                
+                            st.markdown("## 📝 Final Blog Post")
                             st.markdown(blog_content)
-                    
-                    st.markdown('<div class="success-message">✅ Blog post generated successfully!</div>', unsafe_allow_html=True)
-                    
-                    # Save to database
-                    if os.path.exists("outputs/ai_blog_post.md"):
-                        with open("outputs/ai_blog_post.md", "r") as f:
-                            blog_content = f.read()
-                            if result and hasattr(result, 'pydantic'):
+                            
+                            # Save to database if available
+                            if hasattr(result, 'pydantic'):
                                 db_result = save_to_database(result.pydantic, blog_content)
                                 if db_result:
-                                    st.success(f"Blog post saved to database! View it in the Manage Posts page.")
-                                    st.markdown(f"Post ID: `{db_result['id']}`")
-                    
-            except Exception as e:
-                st.markdown('<div class="error-message">❌ An error occurred during execution</div>', unsafe_allow_html=True)
-                
-                # Create an expander for the full error details
-                with st.expander("See detailed error message"):
-                    st.markdown(f'<div class="error-message">Error message: {str(e)}</div>', unsafe_allow_html=True)
-                    st.code(traceback.format_exc(), language="python")
-                    
-                    if 'terminal_output' in locals():
-                        st.markdown('<div class="terminal-header">Terminal Output at Time of Error</div>', unsafe_allow_html=True)
-                        terminal_output.markdown('<div class="error-message">Terminal output unavailable</div>', unsafe_allow_html=True)
-        else:
-            st.warning("Please enter a topic first!")
+                                    st.success("✅ Blog post saved to database!")
+            
+        except Exception as e:
+            st.error("❌ An error occurred")
+            with st.expander("See error details"):
+                st.error(str(e))
+                st.code(traceback.format_exc())
 
 def save_to_database(blog_post, content):
     """Save the generated blog post to the database"""

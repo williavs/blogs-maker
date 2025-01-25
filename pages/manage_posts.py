@@ -24,7 +24,7 @@ def show_manage_posts():
             return
             
         # Fetch all posts
-        response = db.supabase.table("posts").select("*").order('created_at', desc=True).execute()
+        response = db.client.table("posts").select("*").order('created_at', desc=True).execute()
         posts = response.data
         
         # Debug: Show total posts
