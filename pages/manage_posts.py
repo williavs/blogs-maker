@@ -1,10 +1,8 @@
 import streamlit as st
+import pandas as pd
+import json
 from datetime import datetime
-from utils.auth import require_auth, init_auth
-from database import DatabaseClient
-
-# Initialize authentication
-init_auth()
+from utils.database import DatabaseClient
 
 # Initialize database client with Supabase credentials from Streamlit secrets
 db = DatabaseClient(
@@ -12,17 +10,11 @@ db = DatabaseClient(
     key=st.secrets["SUPABASE_KEY"]
 )
 
-@require_auth
 def show_manage_posts():
     """Show the manage posts interface"""
     st.title("Manage Blog Posts")
     
     try:
-        # Get the session from Streamlit's session state
-        if not st.session_state.get("authenticated"):
-            st.error("Please log in to view posts")
-            return
-            
         # Fetch all posts
         response = db.client.table("posts").select("*").order('created_at', desc=True).execute()
         posts = response.data
