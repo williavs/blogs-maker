@@ -1,6 +1,4 @@
 import streamlit as st
-st.set_page_config(layout="wide")
-
 import subprocess
 import json
 import os
@@ -30,17 +28,8 @@ def show_invoice_generator():
     > Simply fill in your client details, enter your time entries, and get a professionally formatted PDF invoice.
     """)
     
-    # Create two columns for the main layout
-    col1, col2 = st.columns([3, 2])
-    
-    with col1:
-        # Client Information in an expander
-        with st.expander("📋 Client Information", expanded=True):
-            client_name = st.text_input("Client Name")
-            client_email = st.text_input("Client Email")
-            client_address = st.text_area("Client Address", height=100)
-        
-        # Time Entries Section
+    # Move time entries to sidebar
+    with st.sidebar:
         st.subheader("⏱️ Time Entries")
         hourly_rate = st.number_input("Hourly Rate ($)", min_value=0.0, value=150.0, step=25.0)
         
@@ -83,6 +72,16 @@ def show_invoice_generator():
                     
                 except Exception as e:
                     st.error(f"Error processing entries: {str(e)}")
+    
+    # Create two columns for the main layout
+    col1, col2 = st.columns([3, 2])
+    
+    with col1:
+        # Client Information in an expander
+        with st.expander("📋 Client Information", expanded=True):
+            client_name = st.text_input("Client Name")
+            client_email = st.text_input("Client Email")
+            client_address = st.text_area("Client Address", height=100)
     
     with col2:
         st.markdown("### 📊 Preview & Download")

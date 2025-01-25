@@ -1,13 +1,18 @@
 import streamlit as st
-import subprocess
-import os
 
-# Page config
+# Page config must be the first Streamlit command
 st.set_page_config(
     page_title="AI Blog Generator",
     page_icon="✍️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+import subprocess
+import os
+from pages.manage_posts import show_manage_posts
+from pages.invoice_generator import show_invoice_generator
+from pages.edit_post import show_edit_post
 
 # Custom CSS
 st.markdown("""
@@ -41,89 +46,103 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Title section
-st.markdown("""
-<div class="title-container">
-    <h1>✍️ AI Blog Generator</h1>
-    <p style="font-size: 1.2em; color: #666;">Transform your ideas into engaging blog posts with AI assistance</p>
-</div>
-""", unsafe_allow_html=True)
+# Sidebar navigation
+page = st.sidebar.selectbox(
+    "Select Page",
+    ["Blog Generator", "Manage Posts", "Edit Post", "Invoice Generator"]
+)
 
-# Create columns for input fields
-col1, col2 = st.columns([3, 1])
-
-with col1:
-    # Topic input with placeholder
-    topic = st.text_input(
-        "What's your blog topic?",
-        placeholder="e.g., The future of AI in healthcare",
-        help="Enter the main topic or subject you want to write about"
-    )
-
-with col2:
-    # Analysis depth slider
-    analysis_depth = st.select_slider(
-        "Analysis Depth",
-        options=["Basic", "Detailed", "Comprehensive"],
-        value="Detailed",
-        help="Choose how deep you want the analysis to be"
-    )
-
-# Info box about the process
-with st.expander("ℹ️ How it works", expanded=False):
+if page == "Blog Generator":
+    # Title section
     st.markdown("""
-    1. **Research**: AI explores your topic using web searches
-    2. **Analysis**: Connects ideas and finds valuable insights
-    3. **Writing**: Creates an engaging blog post in a conversational style
-    4. **Saving**: Automatically saves as a draft in your database
-    
-    The generated post will be casual but informative, perfect for tech enthusiasts!
-    """)
+    <div class="title-container">
+        <h1>✍️ AI Blog Generator</h1>
+        <p style="font-size: 1.2em; color: #666;">Transform your ideas into engaging blog posts with AI assistance</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# Generate button
-if st.button("✨ Generate Blog Post", help="Click to start generating your blog post"):
-    if not topic:
-        st.error("Please enter a topic first!")
-    else:
-        try:
-            # Make the shell script executable
-            script_path = os.path.join(os.path.dirname(__file__), "run.sh")
-            os.chmod(script_path, 0o755)
-            
-            # Create a placeholder for output
-            output_placeholder = st.empty()
-            
-            # Run the shell script with topic and analysis depth
-            process = subprocess.Popen(
-                [script_path, topic, analysis_depth, st.secrets["ANTHROPIC_API_KEY"]],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1
-            )
-            
-            # Initialize output lines list
-            output_lines = []
-            
-            # Read and display output in real-time
-            for line in process.stdout:
-                output_lines.append(line)
-                output_placeholder.markdown(
-                    f'<div class="terminal">{"".join(output_lines)}</div>',
-                    unsafe_allow_html=True
-                )
-            
-            # Wait for the process to complete
-            process.wait()
-            
-            if process.returncode == 0:
-                st.success("✅ Blog post generated and saved as draft!")
-            else:
-                st.error("❌ An error occurred during generation")
+    # Create columns for input fields
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        # Topic input with placeholder
+        topic = st.text_input(
+            "What's your blog topic?",
+            placeholder="e.g., The future of AI in healthcare",
+            help="Enter the main topic or subject you want to write about"
+        )
+
+    with col2:
+        # Analysis depth slider
+        analysis_depth = st.select_slider(
+            "Analysis Depth",
+            options=["Basic", "Detailed", "Comprehensive"],
+            value="Detailed",
+            help="Choose how deep you want the analysis to be"
+        )
+
+    # Info box about the process
+    with st.expander("ℹ️ How it works", expanded=False):
+        st.markdown("""
+        1. **Research**: AI explores your topic using web searches
+        2. **Analysis**: Connects ideas and finds valuable insights
+        3. **Writing**: Creates an engaging blog post in a conversational style
+        4. **Saving**: Automatically saves as a draft in your database
+        
+        The generated post will be casual but informative, perfect for tech enthusiasts!
+        """)
+
+    # Generate button
+    if st.button("✨ Generate Blog Post", help="Click to start generating your blog post"):
+        if not topic:
+            st.error("Please enter a topic first!")
+        else:
+            try:
+                # Make the shell script executable
+                script_path = os.path.join(os.path.dirname(__file__), "run.sh")
+                os.chmod(script_path, 0o755)
                 
-        except Exception as e:
-            st.error(f"❌ An error occurred: {str(e)}")
-            
+                # Create a placeholder for output
+                output_placeholder = st.empty()
+                
+                # Run the shell script with topic and analysis depth
+                process = subprocess.Popen(
+                    [script_path, topic, analysis_depth, st.secrets["ANTHROPIC_API_KEY"]],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True,
+                    bufsize=1
+                )
+                
+                # Initialize output lines list
+                output_lines = []
+                
+                # Read and display output in real-time
+                for line in process.stdout:
+                    output_lines.append(line)
+                    output_placeholder.markdown(
+                        f'<div class="terminal">{"".join(output_lines)}</div>',
+                        unsafe_allow_html=True
+                    )
+                
+                # Wait for the process to complete
+                process.wait()
+                
+                if process.returncode == 0:
+                    st.success("✅ Blog post generated and saved as draft!")
+                else:
+                    st.error("❌ An error occurred during generation")
+                    
+            except Exception as e:
+                st.error(f"❌ An error occurred: {str(e)}")
+
+elif page == "Manage Posts":
+    show_manage_posts()
+elif page == "Edit Post":
+    show_edit_post()
+elif page == "Invoice Generator":
+    show_invoice_generator()
+
 # Footer
 st.markdown("""
 <div style="text-align: center; margin-top: 2rem; padding: 1rem; background-color: #f0f2f6; border-radius: 10px;">

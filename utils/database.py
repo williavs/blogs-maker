@@ -318,6 +318,122 @@ class DatabaseClient:
         except Exception as e:
             raise Exception(f"Error adding media to post: {str(e)}")
 
+    def upload_post_image(self, file_path: str, file_data: bytes) -> str:
+        """Upload an image for a post to Supabase storage.
+        
+        Args:
+            file_path: The path where the file should be stored (e.g. 'posts/image1.png')
+            file_data: The binary data of the file
+            
+        Returns:
+            str: The URL of the uploaded image
+        """
+        try:
+            response = self.client.storage.from_("posts").upload(
+                path=file_path,
+                file=file_data,
+                file_options={"content-type": "image/*", "upsert": True}
+            )
+            # Get public URL for the uploaded image
+            image_url = self.client.storage.from_("posts").get_public_url(file_path)
+            return image_url
+        except Exception as e:
+            print(f"Error uploading image: {str(e)}")
+            raise
+
+    def update_post(self, post_id: str, updates: dict) -> dict:
+        """Update an existing post.
+        
+        Args:
+            post_id: The ID of the post to update
+            updates: Dictionary containing the fields to update
+            
+        Returns:
+            dict: The updated post data
+        """
+        try:
+            response = self.client.table("posts").update(updates).eq("id", post_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            print(f"Error updating post: {str(e)}")
+            raise
+
+    def get_post(self, post_id: str) -> dict:
+        """Get a single post by ID.
+        
+        Args:
+            post_id: The ID of the post to retrieve
+            
+        Returns:
+            dict: The post data
+        """
+        try:
+            response = self.client.table("posts").select("*").eq("id", post_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            print(f"Error getting post: {str(e)}")
+            raise
+
+    def create_post(self, post_data: dict) -> dict:
+        """Create a new post.
+        
+        Args:
+            post_data: Dictionary containing the post data (title, content, description, etc.)
+            
+        Returns:
+            dict: The created post data
+        """
+        try:
+            response = self.client.table("posts").insert(post_data).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            print(f"Error creating post: {str(e)}")
+            raise
+
+    def delete_post(self, post_id: str) -> bool:
+        """Delete a post and its associated image if any.
+        
+        Args:
+            post_id: The ID of the post to delete
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Get post to check for image
+            post = self.get_post(post_id)
+            if post and post.get('thumbnail_url'):
+                # Extract filename from URL and delete from storage
+                file_path = post['thumbnail_url'].split('/')[-1]
+                self.client.storage.from_("posts").remove([f"posts/{file_path}"])
+            
+            # Delete the post
+            response = self.client.table("posts").delete().eq("id", post_id).execute()
+            return bool(response.data)
+        except Exception as e:
+            print(f"Error deleting post: {str(e)}")
+            raise
+
+    def get_signed_url(self, file_path: str, expires_in: int = 3600) -> str:
+        """Get a signed URL for a file that expires after the specified time.
+        
+        Args:
+            file_path: The path to the file in storage
+            expires_in: Number of seconds until URL expires (default 1 hour)
+            
+        Returns:
+            str: The signed URL
+        """
+        try:
+            response = self.client.storage.from_("posts").create_signed_url(
+                path=file_path,
+                expires_in=expires_in
+            )
+            return response['signedURL']
+        except Exception as e:
+            print(f"Error getting signed URL: {str(e)}")
+            raise
+
 # Create a singleton instance
 db = DatabaseClient(
     url=st.secrets["SUPABASE_URL"],
