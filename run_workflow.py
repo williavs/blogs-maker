@@ -1,6 +1,6 @@
 from praisonaiagents import Agent, Task, PraisonAIAgents, Tools
 from praisonaiagents.tools import duckduckgo
-from database import BlogPostDB
+from utils.database import BlogPostDB
 import os
 import sys
 import json
